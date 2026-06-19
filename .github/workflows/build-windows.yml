@@ -47,14 +47,14 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows-test-${{ github.run_number }}
-          name: Windows Test Build ${{ github.run_number }}
+          tag_name: windows-${{ github.run_number }}
+          name: Voice Bar Windows ${{ github.run_number }}
           body: |
             Download `voice_bar_app-windows.zip`, unzip, and run `voice_bar_app.exe`.
-            See WINDOWS_TESTER_README.txt inside the zip for testing steps.
+            Press F5 to record, F5 again to stop and paste text.
           files: voice_bar_app-windows.zip
           draft: false
           prerelease: true
