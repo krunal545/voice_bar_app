@@ -1,0 +1,62 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package release folder
+        shell: pwsh
+        run: |
+          $release = "build/windows/x64/runner/Release"
+          Copy-Item "WINDOWS_TESTER_README.txt" "$release/WINDOWS_TESTER_README.txt"
+          Compress-Archive -Path "$release/*" -DestinationPath voice_bar_app-windows.zip
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice_bar_app-windows
+          path: |
+            build/windows/x64/runner/Release/
+            voice_bar_app-windows.zip
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-test-${{ github.run_number }}
+          name: Windows Test Build ${{ github.run_number }}
+          body: |
+            Download `voice_bar_app-windows.zip`, unzip, and run `voice_bar_app.exe`.
+            See WINDOWS_TESTER_README.txt inside the zip for testing steps.
+          files: voice_bar_app-windows.zip
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
