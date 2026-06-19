@@ -1,9 +1,14 @@
 #include "speech_helper.h"
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 #include <sapi.h>
+
+#pragma warning(push)
+#pragma warning(disable : 4996)
 #include <sphelper.h>
+#pragma warning(pop)
 
 #include <filesystem>
 #include <string>
@@ -80,9 +85,36 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
     return L"";
   }
 
-  hr = context->SetInterest(SPFEI(SPEI_RECOGNITION) | SPFEI(SPEI_FALSERECOGNITION),
-                            SPFEI(SPEI_RECOGNITION) | SPFEI(SPEI_FALSERECOGNITION));
+  HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+  if (!event) {
+    Release(context);
+    Release(recognizer);
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    if (error) {
+      *error = L"Failed to initialize speech recognition";
+    }
+    return L"";
+  }
+
+  hr = context->SetNotifyWin32Event(event);
   if (FAILED(hr)) {
+    CloseHandle(event);
+    Release(context);
+    Release(recognizer);
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    if (error) {
+      *error = L"Failed to configure speech recognition";
+    }
+    return L"";
+  }
+
+  hr = context->SetInterest(SPFEI(SPEI_RECOGNITION), SPFEI(SPEI_RECOGNITION));
+  if (FAILED(hr)) {
+    CloseHandle(event);
     Release(context);
     Release(recognizer);
     if (should_uninitialize) {
@@ -97,6 +129,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
   ISpRecoGrammar* grammar = nullptr;
   hr = context->CreateGrammar(0, &grammar);
   if (FAILED(hr) || !grammar) {
+    CloseHandle(event);
     Release(context);
     Release(recognizer);
     if (should_uninitialize) {
@@ -110,6 +143,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
 
   hr = grammar->LoadDictation(nullptr, SPLO_STATIC);
   if (FAILED(hr)) {
+    CloseHandle(event);
     Release(grammar);
     Release(context);
     Release(recognizer);
@@ -124,6 +158,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
 
   hr = grammar->SetDictationState(SPRS_ACTIVE);
   if (FAILED(hr)) {
+    CloseHandle(event);
     Release(grammar);
     Release(context);
     Release(recognizer);
@@ -139,6 +174,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
   ISpStream* stream = nullptr;
   hr = SPBindToFile(path.c_str(), SPFM_OPEN_READONLY, &stream);
   if (FAILED(hr) || !stream) {
+    CloseHandle(event);
     Release(grammar);
     Release(context);
     Release(recognizer);
@@ -154,6 +190,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
 
   hr = recognizer->SetInput(stream, TRUE);
   if (FAILED(hr)) {
+    CloseHandle(event);
     Release(stream);
     Release(grammar);
     Release(context);
@@ -167,9 +204,26 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
     return L"";
   }
 
+  const DWORD wait_result = WaitForSingleObject(event, 30000);
+  if (wait_result != WAIT_OBJECT_0) {
+    CloseHandle(event);
+    Release(stream);
+    Release(grammar);
+    Release(context);
+    Release(recognizer);
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    if (error) {
+      *error = L"No speech detected. Try speaking louder and closer to the mic.";
+    }
+    return L"";
+  }
+
   ISpRecoResult* result = nullptr;
-  hr = context->Recognize(SPRIO_NONE, 0, nullptr, &result);
+  hr = context->GetRecoResult(&result);
   if (FAILED(hr) || !result) {
+    CloseHandle(event);
     Release(stream);
     Release(grammar);
     Release(context);
@@ -192,6 +246,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
   }
 
   grammar->SetDictationState(SPRS_INACTIVE);
+  CloseHandle(event);
   Release(result);
   Release(stream);
   Release(grammar);

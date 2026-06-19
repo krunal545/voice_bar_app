@@ -1,7 +1,8 @@
 #include "paste_helper.h"
 
-#include <shellapi.h>
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 
 #include <memory>
 #include <string>
