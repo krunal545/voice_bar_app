@@ -98,7 +98,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
     return L"";
   }
 
-  hr = context->SetNotifyWin32Event(event);
+  hr = context->SetNotifyWin32Event(event, nullptr, 0, 0, 0);
   if (FAILED(hr)) {
     CloseHandle(event);
     Release(context);
@@ -221,7 +221,7 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
   }
 
   ISpRecoResult* result = nullptr;
-  hr = context->GetRecoResult(&result);
+  hr = context->GetResult(0, &result);
   if (FAILED(hr) || !result) {
     CloseHandle(event);
     Release(stream);
@@ -238,7 +238,9 @@ std::wstring TranscribeAudioFile(const std::wstring& path,
   }
 
   LPWSTR text = nullptr;
-  hr = result->GetText(SP_GETWHOLEPHRASE, SP_GETWHOLEPHRASE, TRUE, &text, nullptr);
+  hr = result->GetText(static_cast<ULONG>(SP_GETWHOLEPHRASE),
+                       static_cast<ULONG>(SP_GETWHOLEPHRASE), TRUE, &text,
+                       nullptr);
   std::wstring transcription;
   if (SUCCEEDED(hr) && text) {
     transcription = Trim(text);
